@@ -1,0 +1,45 @@
+name: Deploy to Server
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build project
+        run: npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via rsync
+        run: |
+          rsync -rlgoDzvc --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.htaccess' \
+            --exclude '.user.ini' \
+            --exclude '.well-known' \
+            --exclude '502.html' \
+            --exclude '404.html' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./dist/ ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/www/wwwroot/jedara.com/
